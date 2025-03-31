@@ -3,12 +3,14 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from "react-native"
 import React, { useState, useRef, useEffect } from "react"
 
 import { ThemedText } from "@/components/ThemedText"
 import { ThemedView } from "@/components/ThemedView"
 import { IconSymbol } from "@/components/ui/IconSymbol"
+import Constants from "expo-constants"
 
 // Define the type for chat messages
 interface ChatMessage {
@@ -17,8 +19,13 @@ interface ChatMessage {
   isBot: boolean
 }
 
+// Safely access the API key with type checking
+const GEMINI_API_KEY =
+  Constants.expoConfig?.extra?.geminiApiKey // Replace with your actual API key or fallback
+
 export default function HomeScreen() {
   const [message, setMessage] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     { id: 1, text: "Hello! How can I help you today?", isBot: true },
   ])
@@ -33,8 +40,55 @@ export default function HomeScreen() {
     }
   }, [chatHistory])
 
-  const sendMessage = () => {
+  // Function to call Gemini API
+  const callGeminiApi = async (userMessage: string) => {
+    try {
+      // Check if API key is available
+      if (!GEMINI_API_KEY) {
+        return "API key not configured. Please add your Gemini API key to the app configuration."
+      }
+
+      const API_URL =
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent"
+
+      const response = await fetch(`${API_URL}?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: userMessage,
+                },
+              ],
+            },
+          ],
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("API Error:", errorText)
+        throw new Error(`API request failed with status ${response.status}`)
+      }
+
+      const responseData = await response.json()
+      return (
+        responseData?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "Sorry, I couldn't generate a response."
+      )
+    } catch (error) {
+      console.error("Error calling Gemini API:", error)
+      return "Sorry, there was an error processing your request. Please try again later."
+    }
+  }
+
+  const sendMessage = async () => {
     if (message.trim() === "") return
+    setIsLoading(true)
 
     // Add user message to chat
     const newUserMessage: ChatMessage = {
@@ -43,18 +97,30 @@ export default function HomeScreen() {
       isBot: false,
     }
 
-    setChatHistory([...chatHistory, newUserMessage])
+    setChatHistory((prev) => [...prev, newUserMessage])
+
+    // Store message and clear input
+    const userMessageText = message
     setMessage("")
 
-    // Mock response (placeholder for API integration)
-    setTimeout(() => {
+    try {
+      // Call Gemini API
+      const botResponseText = await callGeminiApi(userMessageText)
+
+      // Add bot response to chat
       const botResponse: ChatMessage = {
         id: chatHistory.length + 2,
-        text: "This is a placeholder response. API integration will be added later.",
+        text: botResponseText,
         isBot: true,
       }
-      setChatHistory((prevChat) => [...prevChat, botResponse])
-    }, 1000)
+
+      setChatHistory((prev) => [...prev, botResponse])
+    } catch (error) {
+      Alert.alert("Error", "Failed to get response from AI. Please try again.")
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Fix the parameter type
@@ -85,7 +151,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedView style={styles.header}>
-        <ThemedText type="title">Chat Assistant</ThemedText>
+        <ThemedText type="title">Gemini Chat Assistant</ThemedText>
       </ThemedView>
 
       <ThemedView style={styles.chatContainer}>
@@ -95,6 +161,17 @@ export default function HomeScreen() {
           contentContainerStyle={styles.chatHistoryContent}
         >
           {chatHistory.map((item) => renderChatBubble(item))}
+          {isLoading && (
+            <ThemedView style={[styles.chatBubble, styles.botBubble]}>
+              <IconSymbol
+                size={18}
+                name="bubble.left.fill"
+                color="#4F8EF7"
+                style={styles.botIcon}
+              />
+              <ThemedText style={styles.botText}>Thinking...</ThemedText>
+            </ThemedView>
+          )}
         </ScrollView>
 
         <ThemedView style={styles.inputContainer}>
@@ -105,11 +182,15 @@ export default function HomeScreen() {
             placeholder="Type your message..."
             placeholderTextColor="#999"
             multiline
+            editable={!isLoading}
           />
           <TouchableOpacity
-            style={styles.sendButton}
+            style={[
+              styles.sendButton,
+              (isLoading || message.trim() === "") && styles.disabledButton,
+            ]}
             onPress={sendMessage}
-            disabled={message.trim() === ""}
+            disabled={isLoading || message.trim() === ""}
           >
             <IconSymbol size={24} name="paperplane.fill" color="#FFFFFF" />
           </TouchableOpacity>
@@ -122,76 +203,81 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 50, // Add padding for status bar
+    padding: 16,
   },
   header: {
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
     alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   chatContainer: {
     flex: 1,
-    justifyContent: "space-between",
+    marginTop: 8,
   },
   chatHistory: {
     flex: 1,
   },
   chatHistoryContent: {
-    padding: 16,
-    paddingBottom: 24,
+    paddingVertical: 8,
   },
   chatBubble: {
-    maxWidth: "80%",
     padding: 12,
     borderRadius: 16,
-    marginBottom: 10,
-  },
-  botBubble: {
-    alignSelf: "flex-start",
-    backgroundColor: "#e1f5fe",
-    borderBottomLeftRadius: 4,
+    marginVertical: 4,
+    maxWidth: "80%",
     flexDirection: "row",
     alignItems: "flex-start",
   },
+  botBubble: {
+    backgroundColor: "#F0F4FF",
+    alignSelf: "flex-start",
+    marginRight: "auto",
+    borderBottomLeftRadius: 4,
+  },
   userBubble: {
+    backgroundColor: "#4F8EF7",
     alignSelf: "flex-end",
-    backgroundColor: "#e3f2fd",
+    marginLeft: "auto",
     borderBottomRightRadius: 4,
+  },
+  botText: {
+    color: "#333",
+  },
+  userText: {
+    color: "#FFFFFF",
   },
   botIcon: {
     marginRight: 8,
     marginTop: 2,
   },
-  botText: {
-    color: "#000",
-    flex: 1,
-  },
-  userText: {
-    color: "#000",
-  },
   inputContainer: {
     flexDirection: "row",
-    padding: 10,
+    padding: 8,
     borderTopWidth: 1,
-    borderTopColor: "#ccc",
-    alignItems: "center",
+    borderTopColor: "#eee",
+    marginTop: 8,
   },
   textInput: {
     flex: 1,
-    backgroundColor: "#f1f1f1",
+    minHeight: 40,
+    backgroundColor: "#f5f5f5",
     borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    maxHeight: 100,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    color: "#333",
   },
   sendButton: {
-    marginLeft: 10,
-    backgroundColor: "#4F8EF7",
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: "#4F8EF7",
     justifyContent: "center",
     alignItems: "center",
+  },
+  disabledButton: {
+    backgroundColor: "#B0C4DE",
+    opacity: 0.7,
   },
 })
