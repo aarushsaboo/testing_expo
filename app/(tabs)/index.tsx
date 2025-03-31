@@ -1,74 +1,197 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import {
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+} from "react-native"
+import React, { useState, useRef, useEffect } from "react"
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from "@/components/ThemedText"
+import { ThemedView } from "@/components/ThemedView"
+import { IconSymbol } from "@/components/ui/IconSymbol"
+
+// Define the type for chat messages
+interface ChatMessage {
+  id: number
+  text: string
+  isBot: boolean
+}
 
 export default function HomeScreen() {
+  const [message, setMessage] = useState("")
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
+    { id: 1, text: "Hello! How can I help you today?", isBot: true },
+  ])
+
+  // Fix the ref type
+  const scrollViewRef = useRef<ScrollView>(null)
+
+  useEffect(() => {
+    // Scroll to bottom whenever chat history changes
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollToEnd({ animated: true })
+    }
+  }, [chatHistory])
+
+  const sendMessage = () => {
+    if (message.trim() === "") return
+
+    // Add user message to chat
+    const newUserMessage: ChatMessage = {
+      id: chatHistory.length + 1,
+      text: message,
+      isBot: false,
+    }
+
+    setChatHistory([...chatHistory, newUserMessage])
+    setMessage("")
+
+    // Mock response (placeholder for API integration)
+    setTimeout(() => {
+      const botResponse: ChatMessage = {
+        id: chatHistory.length + 2,
+        text: "This is a placeholder response. API integration will be added later.",
+        isBot: true,
+      }
+      setChatHistory((prevChat) => [...prevChat, botResponse])
+    }, 1000)
+  }
+
+  // Fix the parameter type
+  const renderChatBubble = (item: ChatMessage) => {
+    return (
+      <ThemedView
+        key={item.id}
+        style={[
+          styles.chatBubble,
+          item.isBot ? styles.botBubble : styles.userBubble,
+        ]}
+      >
+        {item.isBot && (
+          <IconSymbol
+            size={18}
+            name="bubble.left.fill"
+            color="#4F8EF7"
+            style={styles.botIcon}
+          />
+        )}
+        <ThemedText style={item.isBot ? styles.botText : styles.userText}>
+          {item.text}
+        </ThemedText>
+      </ThemedView>
+    )
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
+    <ThemedView style={styles.container}>
+      <ThemedView style={styles.header}>
+        <ThemedText type="title">Chat Assistant</ThemedText>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
+
+      <ThemedView style={styles.chatContainer}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.chatHistory}
+          contentContainerStyle={styles.chatHistoryContent}
+        >
+          {chatHistory.map((item) => renderChatBubble(item))}
+        </ScrollView>
+
+        <ThemedView style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Type your message..."
+            placeholderTextColor="#999"
+            multiline
+          />
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={sendMessage}
+            disabled={message.trim() === ""}
+          >
+            <IconSymbol size={24} name="paperplane.fill" color="#FFFFFF" />
+          </TouchableOpacity>
+        </ThemedView>
       </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    </ThemedView>
+  )
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    paddingTop: 50, // Add padding for status bar
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+    alignItems: "center",
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  chatContainer: {
+    flex: 1,
+    justifyContent: "space-between",
   },
-});
+  chatHistory: {
+    flex: 1,
+  },
+  chatHistoryContent: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  chatBubble: {
+    maxWidth: "80%",
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+  },
+  botBubble: {
+    alignSelf: "flex-start",
+    backgroundColor: "#e1f5fe",
+    borderBottomLeftRadius: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  userBubble: {
+    alignSelf: "flex-end",
+    backgroundColor: "#e3f2fd",
+    borderBottomRightRadius: 4,
+  },
+  botIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  botText: {
+    color: "#000",
+    flex: 1,
+  },
+  userText: {
+    color: "#000",
+  },
+  inputContainer: {
+    flexDirection: "row",
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#ccc",
+    alignItems: "center",
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: "#f1f1f1",
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    maxHeight: 100,
+  },
+  sendButton: {
+    marginLeft: 10,
+    backgroundColor: "#4F8EF7",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+})
